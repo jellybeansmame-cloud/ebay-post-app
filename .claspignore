@@ -1,0 +1,8 @@
+# GitHub Pages 用（ブラウザ専用。GAS へ push しない）
+pwa-shell/**
+
+# CI・リポジトリ管理
+.github/**
+.git/**
+.gitignore
+README.md

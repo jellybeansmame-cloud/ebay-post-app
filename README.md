@@ -20,3 +20,9 @@ GAS の URL（`script.google.com/.../exec`）を直接ホームに追加する�
 ### GAS 直リンクの場合
 
 manifest / Service Worker は入れていますが、Android ではバッジが消えない場合があります。iOS Safari ではバッジはもともと付きません。
+
+## clasp push について
+
+`pwa-shell/` は **GitHub Pages 専用**（`window` を使うブラウザ用 JS）です。`.claspignore` で GAS へは送らないようにしています。
+
+以前 `pwa-shell/config` が GAS に上がっていると `window is not defined` になります。Apps Script エディタで **`pwa-shell` フォルダ内のファイルをすべて削除** してから `clasp push` してください。

@@ -2,3 +2,4 @@
 .env.*
 *.credentials.json
 serviceAccountKey.json
+node_modules/

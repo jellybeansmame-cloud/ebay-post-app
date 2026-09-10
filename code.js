@@ -7,13 +7,10 @@
 // 透過PNGだと不透明部分だけ拡大されるので、余白＋不透明背景の画像を使う。
 // setFaviconUrl のURLは末尾が .png / .ico である必要がある。
 const PWA_ICON_BASE =
-  'https://jellybeansmame-cloud.github.io/ebay-post-app/icon.svg';
+  'https://jellybeansmame-cloud.github.io/ebay-post-app/icon-';
 
 function iconUrl(size) {
-  return (
-    'https://wsrv.nl/?url=' + encodeURIComponent(PWA_ICON_BASE) +
-    '&w=' + size + '&h=' + size + '&output=png'
-  );
+  return PWA_ICON_BASE + size + '.png';
 }
 
 const WEB_APP_FAVICON_URL = iconUrl(224);
