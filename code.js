@@ -6,10 +6,13 @@
 // Androidの「ホームに追加」は外側ページのfaviconだけを見る。
 // 透過PNGだと不透明部分だけ拡大されるので、余白＋不透明背景の画像を使う。
 // setFaviconUrl のURLは末尾が .png / .ico である必要がある。
+const PWA_ICON_BASE =
+  'https://jellybeansmame-cloud.github.io/ebay-post-app/icon.svg';
+
 function iconUrl(size) {
   return (
-    'https://wsrv.nl/?url=raw.githubusercontent.com/googlefonts/noto-emoji/main/png/128/emoji_u1f4ee.png' +
-    '&w=' + size + '&h=' + size + '&fit=contain&we&cbg=667eea&bg=667eea&output=png'
+    'https://wsrv.nl/?url=' + encodeURIComponent(PWA_ICON_BASE) +
+    '&w=' + size + '&h=' + size + '&output=png'
   );
 }
 
