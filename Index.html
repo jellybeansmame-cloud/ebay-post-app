@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta http-equiv="Permissions-Policy" content="camera=(self)">
+  
+  <!-- PWA（Android Chrome のホーム追加で Chrome バッジを避ける） -->
+  <meta name="apple-mobile-web-app-title" content="レシート">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#667eea">
+  <link rel="manifest" href="<?= manifestUrl ?>">
+  <link rel="icon" type="image/png" sizes="192x192" href="<?= icon192Url ?>">
+  <link rel="apple-touch-icon" sizes="192x192" href="<?= icon192Url ?>">
+  <link rel="apple-touch-icon" sizes="512x512" href="<?= icon512Url ?>">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 10px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    }
+    
+    h3 { color: #333; margin-bottom: 15px; font-size: 20px; text-align: center; }
+    h4 { color: #667eea; font-size: 16px; margin-top: 15px; margin-bottom: 10px; }
+    
+    #capture-area { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+    
+    button {
+      padding: 18px;
+      font-size: 18px;
+      font-weight: 600;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      cursor: pointer;
+      transition: all 0.3s;
+      width: 100%;
+      max-width: 400px;
+    }
+    
+    button:active { transform: scale(0.98); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    
+    #confirmBtn { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+    
+    #loading {
+      color: #f39c12; font-weight: bold; font-size: 16px;
+      margin: 20px 0; display: none; text-align: center;
+    }
+    
+    #edit-area { width: 100%; display: none; }
+    
+    .input-group { margin: 12px 0; }
+    .input-group label { display: block; margin-bottom: 6px; font-weight: 600; color: #333; font-size: 14px; }
+    
+    input {
+      width: 100%; padding: 12px; font-size: 16px;
+      border: 2px solid #ddd; border-radius: 8px; transition: border-color 0.3s;
+    }
+    
+    input:focus { outline: none; border-color: #667eea; }
+    input:read-only { background: #f5f5f5; color: #666; }
+    
+    .item-row {
+      background: #f8f9fa; padding: 15px; margin: 12px 0;
+      border-radius: 12px; border-left: 4px solid #667eea;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    #items-container { max-height: 50vh; overflow-y: auto; padding-right: 5px; }
+    
+    .button-group { display: flex; gap: 10px; margin-top: 15px; }
+    .button-group button {
+      flex: 1; padding: 14px; font-size: 16px; font-weight: 600;
+      border: none; border-radius: 10px; cursor: pointer; transition: all 0.3s;
+    }
+    
+    .btn-save {
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+      color: white; box-shadow: 0 4px 12px rgba(17, 153, 142, 0.4);
+    }
+    
+    .btn-retry { background: #f5f5f5; color: #333; border: 2px solid #ddd; }
+    .button-group button:active { transform: scale(0.98); }
+    
+    canvas { display: none; }
+    .hidden { display: none !important; }
+    
+    .info-box {
+      background: #e3f2fd; padding: 12px; border-radius: 8px;
+      margin-bottom: 15px; font-size: 13px; color: #1976d2; text-align: center;
+    }
+    
+    #photoCount {
+      background: #fff3cd; padding: 10px; border-radius: 8px;
+      margin: 10px 0; display: none; text-align: center;
+      font-weight: 600; color: #856404;
+    }
+    
+    .thumbnail {
+      width: 100px;
+      height: 100px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 3px solid #667eea;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    
+    .thumbnail:hover {
+      transform: scale(1.05);
+    }
+    
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: #667eea; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h3>📮 郵便レシート読み取り</h3>
+    
+    <div class="info-box" id="infoBox">読み込み中...</div>
+    
+    <div class="input-group" id="ssIdInputGroup">
+      <label>📊 スプレッドシートID</label>
+      <input type="text" id="ssIdInput" placeholder="1ABC...XYZ">
+    </div>
+    
+    <div id="capture-area" class="hidden">
+      <!-- ★ ファイル選択方式 -->
+      <input type="file" id="fileInput" accept="image/*" capture="environment" style="display: none;">
+      
+      <!-- ★ サムネイル表示エリア -->
+      <div id="thumbnails" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 15px;"></div>
+      
+      <div id="photoCount">📸 撮影済み: <span id="photoCountNum">0</span>枚</div>
+      
+      <button id="captureBtn">📷 撮影</button>
+      <button id="confirmBtn" style="display: none;">✅ 確定</button>
+    </div>
+
+    <div id="loading">🤖 解析中...</div>
+
+    <div id="edit-area">
+      <div class="input-group">
+        <label>📅 発送日</label>
+        <input type="date" id="res-date">
+      </div>
+      
+      <div id="items-container"></div>
+      
+      <div class="button-group">
+        <button class="btn-save" onclick="saveData()">💾 保存</button>
+        <button class="btn-retry" onclick="resetCamera()">🔄 撮り直し</button>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ssIdInput = document.getElementById('ssIdInput');
+    const fileInput = document.getElementById('fileInput');
+    const captureBtn = document.getElementById('captureBtn');
+    const confirmBtn = document.getElementById('confirmBtn');
+    
+    let analyzedData = null;
+    let userSsId = '';
+    let capturedPhotos = [];
+    let latestAnalysisRequest = 0;
+    let analysisStartTime = 0;
+
+    const ssIdFromServer = "<?!= ssId ?>";
+    
+    if (ssIdFromServer && ssIdFromServer.length > 20) {
+      ssIdInput.value = ssIdFromServer;
+      userSsId = ssIdFromServer;
+      document.getElementById('infoBox').textContent = 'スプレッドシートID設定済み ✓';
+      document.getElementById('infoBox').style.background = '#d4edda';
+      document.getElementById('infoBox').style.color = '#155724';
+      document.getElementById('ssIdInputGroup').style.display = 'none';
+      showCaptureArea();
+    } else {
+      document.getElementById('infoBox').textContent = 'スプレッドシートIDを入力してください';
+      document.getElementById('infoBox').style.background = '#fff3cd';
+      document.getElementById('infoBox').style.color = '#856404';
+    }
+
+    ssIdInput.addEventListener('input', function() {
+      userSsId = ssIdInput.value.trim();
+      if (userSsId.length > 20) showCaptureArea();
+    });
+
+    function showCaptureArea() {
+      document.getElementById('infoBox').classList.add('hidden');
+      document.getElementById('ssIdInputGroup').style.display = 'none';
+      document.getElementById('capture-area').classList.remove('hidden');
+    }
+
+    // ★ 撮影ボタン
+    captureBtn.addEventListener('click', function() {
+      fileInput.click();
+    });
+
+    // ★ ファイル選択時の処理
+    fileInput.addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      captureBtn.disabled = true;
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          // 画像をリサイズしてbase64化
+          const maxWidth = 1200;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+          
+          capturedPhotos.push(base64);
+          
+          // ★ サムネイルを追加
+          addThumbnail(dataUrl);
+          
+          updatePhotoCount();
+          
+          captureBtn.disabled = false;
+          // ★ ファイル入力をリセット（同じファイルを再選択可能に）
+          event.target.value = '';
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // ★ サムネイル追加
+    function addThumbnail(dataUrl) {
+      const thumbnailsContainer = document.getElementById('thumbnails');
+      const img = document.createElement('img');
+      img.src = dataUrl;
+      img.className = 'thumbnail';
+      img.title = 'クリックで拡大';
+      
+      // クリックで拡大表示
+      img.addEventListener('click', function() {
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+        
+        const largeImg = document.createElement('img');
+        largeImg.src = dataUrl;
+        largeImg.style.cssText = 'max-width:90%;max-height:90%;border-radius:8px;';
+        
+        modal.appendChild(largeImg);
+        modal.addEventListener('click', function() {
+          document.body.removeChild(modal);
+        });
+        
+        document.body.appendChild(modal);
+      });
+      
+      thumbnailsContainer.appendChild(img);
+    }
+
+    function updatePhotoCount() {
+      const photoCount = capturedPhotos.length;
+      const photoCountElem = document.getElementById('photoCount');
+      const photoCountNumElem = document.getElementById('photoCountNum');
+      
+      if (photoCountElem) {
+        photoCountElem.style.display = 'block';
+        photoCountElem.style.background = '#fff3cd';
+      }
+      
+      if (photoCountNumElem) {
+        photoCountNumElem.textContent = photoCount;
+      }
+      
+      if (photoCountElem) {
+        photoCountElem.innerHTML = `📸 ${photoCount}枚撮影完了<br><small style="color:#666;">確定ボタンで解析開始</small>`;
+      }
+      
+      if (confirmBtn) confirmBtn.style.display = 'block';
+    }
+
+    // ★ 確定ボタン
+    confirmBtn.addEventListener('click', function() {
+      if (capturedPhotos.length === 0) {
+        alert('先に撮影してください');
+        return;
+      }
+      
+      // ★ ボタンを全て無効化
+      captureBtn.disabled = true;
+      confirmBtn.disabled = true;
+      
+      analyzedData = null;
+      
+      document.getElementById('loading').innerText = `🤖 ${capturedPhotos.length}枚解析中...\n\n⏳ 処理には1-2分かかることがあります`;
+      document.getElementById('loading').style.display = 'block';
+      
+      analysisStartTime = Date.now();
+      console.log(`[${new Date().toLocaleTimeString()}] 解析開始 (${capturedPhotos.length}枚)`);
+      
+      startAnalysis();
+      
+      // 解析完了を待機
+      const checkInterval = setInterval(function() {
+        if (analyzedData) {
+          clearInterval(checkInterval);
+          proceedToResult();
+        }
+      }, 500);
+    });
+
+    function startAnalysis() {
+      const requestId = ++latestAnalysisRequest;
+      
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (requestId === latestAnalysisRequest) {
+            const elapsed = ((Date.now() - analysisStartTime) / 1000).toFixed(1);
+            console.log(`[${new Date().toLocaleTimeString()}] 解析完了 (所要時間: ${elapsed}秒)`);
+            
+            document.getElementById('loading').style.display = 'none';
+            analyzedData = res;
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (requestId === latestAnalysisRequest) {
+            const elapsed = ((Date.now() - analysisStartTime) / 1000).toFixed(1);
+            console.error(`[${new Date().toLocaleTimeString()}] 解析失敗 (所要時間: ${elapsed}秒)`, err.message);
+            
+            document.getElementById('loading').style.display = 'none';
+            analyzedData = { error: err.message };
+          }
+        })
+        .analyzeMultipleReceipts(capturedPhotos, userSsId);
+    }
+    
+    function proceedToResult() {
+      if (analyzedData.error) {
+        alert(analyzedData.error);
+        
+        // ★ エラー時はボタンを再有効化
+        captureBtn.disabled = false;
+        confirmBtn.disabled = false;
+        
+        // エラーの種類によって処理を分ける
+        if (analyzedData.error.includes('無料枠') || analyzedData.error.includes('API')) {
+          // API関連エラーの場合はリセット
+          resetCamera();
+        }
+        return;
+      }
+      
+      document.getElementById('capture-area').style.display = 'none';
+      document.getElementById('loading').style.display = 'none';
+      showMergedResult(analyzedData);
+    }
+
+    function showMergedResult(res) {
+      document.getElementById('edit-area').style.display = 'block';
+      
+      const trackingItems = res.tracking_items || [];
+      const trackedCount = trackingItems.length;
+      const trackedTotal = res.tracked_items_total_amount || 0;
+      const generalCount = res.general_mail_count || 0;
+      const generalTotal = res.general_mail_total_amount || 0;
+      const totalCount = trackedCount + generalCount;
+      const totalAmount = res.total_amount || 0;
+      
+      let html = `
+        <div class="item-row">
+          <div class="input-group">
+            <label>📅 日付</label>
+            <input type="text" id="edit-date" value="${(res.transaction_date || '').split(' ')[0]}">
+          </div>
+        </div>
+        <h4>📦 追跡番号と金額</h4>
+      `;
+      
+      trackingItems.forEach((item, index) => {
+        html += `
+          <div class="item-row">
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+              <div class="input-group" style="margin: 0;">
+                <label>追跡番号 ${index + 1}</label>
+                <input type="text" id="tracking-${index}" value="${item.tracking_number || ''}" style="font-family: monospace;">
+              </div>
+              <div class="input-group" style="margin: 0;">
+                <label>金額</label>
+                <input type="number" id="tracking-amount-${index}" value="${item.amount || 0}" onchange="recalculateGeneralMail()">
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      
+      html += `
+        <h4>📊 サマリー</h4>
+        <div class="item-row">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="input-group" style="margin: 0;">
+              <label>📦 追跡あり件数</label>
+              <input type="number" id="tracked-count" value="${trackedCount}" readonly>
+            </div>
+            <div class="input-group" style="margin: 0;">
+              <label>📦 追跡あり金額（自動計算）</label>
+              <input type="number" id="tracked-total" value="${trackedTotal}" readonly style="background: #e8f5e9;">
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+            <div class="input-group" style="margin: 0;">
+              <label>✉️ 追跡なし件数</label>
+              <input type="number" id="general-count" value="${generalCount}">
+            </div>
+            <div class="input-group" style="margin: 0;">
+              <label>✉️ 追跡なし金額（自動計算）</label>
+              <input type="number" id="general-total" value="${generalTotal}" readonly style="background: #e8f5e9;">
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 2px solid #667eea;">
+            <div class="input-group" style="margin: 0;">
+              <label>💰 合計件数</label>
+              <input type="number" id="total-count" value="${totalCount}" readonly style="font-weight: 600;">
+            </div>
+            <div class="input-group" style="margin: 0;">
+              <label>💰 合計金額</label>
+              <input type="number" id="total-amount" value="${totalAmount}" onchange="recalculateGeneralMail()" style="font-weight: 600; color: #667eea;">
+            </div>
+          </div>
+        </div>
+      `;
+      
+      document.getElementById('items-container').innerHTML = html;
+      document.getElementById('res-date').parentElement.style.display = 'none';
+    }
+    
+    // ★ 追跡番号の金額変更時に自動再計算
+    function recalculateGeneralMail() {
+      const trackingItems = analyzedData.tracking_items || [];
+      const totalAmount = parseFloat(document.getElementById('total-amount').value) || 0;
+      
+      // 追跡ありの合計を再計算
+      let trackedTotal = 0;
+      trackingItems.forEach((item, index) => {
+        const amount = parseFloat(document.getElementById(`tracking-amount-${index}`).value) || 0;
+        trackedTotal += amount;
+      });
+      
+      // 追跡なし金額を自動計算
+      const generalTotal = totalAmount - trackedTotal;
+      
+      // 画面に反映
+      document.getElementById('tracked-total').value = trackedTotal;
+      document.getElementById('general-total').value = generalTotal;
+    }
+
+    function saveData() {
+      const date = document.getElementById('edit-date').value;
+      const trackingItems = analyzedData.tracking_items || [];
+      
+      const updatedTrackingItems = trackingItems.map((item, index) => ({
+        tracking_number: document.getElementById(`tracking-${index}`).value || item.tracking_number,
+        amount: parseFloat(document.getElementById(`tracking-amount-${index}`).value) || item.amount
+      }));
+      
+      const updatedData = {
+        transaction_date: date,
+        tracking_items: updatedTrackingItems,
+        tracked_items_total_amount: parseFloat(document.getElementById('tracked-total').value) || 0,
+        tracked_items_count: updatedTrackingItems.length,
+        general_mail_count: parseInt(document.getElementById('general-count').value) || 0,
+        general_mail_total_amount: parseFloat(document.getElementById('general-total').value) || 0,
+        total_amount: parseFloat(document.getElementById('total-amount').value) || 0
+      };
+      
+      document.getElementById('loading').innerText = "⌛ 保存中...";
+      document.getElementById('loading').style.display = 'block';
+
+      google.script.run
+        .withSuccessHandler(function(msg) {
+          alert(msg);
+          
+          capturedPhotos = [];
+          analyzedData = null;
+          latestAnalysisRequest = 0;
+          
+          // ★ サムネイルをクリア
+          document.getElementById('thumbnails').innerHTML = '';
+          
+          const photoCountElem = document.getElementById('photoCount');
+          
+          if (photoCountElem) {
+            photoCountElem.style.display = 'none';
+            photoCountElem.style.background = '#fff3cd';
+            photoCountElem.innerHTML = '📸 撮影済み: <span id="photoCountNum">0</span>枚';
+          }
+          
+          if (confirmBtn) {
+            confirmBtn.style.display = 'none';
+            confirmBtn.disabled = false;  // ★ 再有効化
+          }
+          
+          document.getElementById('edit-area').style.display = 'none';
+          document.getElementById('capture-area').style.display = 'flex';
+          document.getElementById('loading').style.display = 'none';
+          captureBtn.disabled = false;  // ★ 再有効化
+        })
+        .withFailureHandler(function(err) {
+          alert('保存エラー: ' + err.message);
+          document.getElementById('loading').style.display = 'none';
+        })
+        .saveMergedReceipt(updatedData, userSsId);
+    }
+
+    function resetCamera() {
+      capturedPhotos = [];
+      analyzedData = null;
+      latestAnalysisRequest = 0;
+      
+      // ★ サムネイルをクリア
+      document.getElementById('thumbnails').innerHTML = '';
+      
+      const photoCountElem = document.getElementById('photoCount');
+      
+      if (photoCountElem) {
+        photoCountElem.style.display = 'none';
+        photoCountElem.style.background = '#fff3cd';
+        photoCountElem.innerHTML = '📸 撮影済み: <span id="photoCountNum">0</span>枚';
+      }
+      
+      if (confirmBtn) {
+        confirmBtn.style.display = 'none';
+        confirmBtn.disabled = false;  // ★ 再有効化
+      }
+      
+      document.getElementById('edit-area').style.display = 'none';
+      document.getElementById('capture-area').style.display = 'flex';
+      document.getElementById('loading').style.display = 'none';
+      captureBtn.disabled = false;  // ★ 再有効化
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('<?= swUrl ?>').catch(function(err) {
+        console.warn('Service Worker registration failed:', err);
+      });
+    }
+  </script>
+</body>
+</html>
