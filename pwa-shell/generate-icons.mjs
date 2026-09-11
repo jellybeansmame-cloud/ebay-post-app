@@ -12,7 +12,7 @@ async function fetchBuffer(url) {
 
 async function makeIcon(size) {
   const emoji = await fetchBuffer(EMOJI_URL);
-  const emojiSize = Math.round(size * 0.82);
+  const emojiSize = Math.round(size * 0.72);
 
   const background = Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
